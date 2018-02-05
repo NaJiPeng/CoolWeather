@@ -8,6 +8,8 @@ public class UrlConfig {
 
     public static final String BASE_URL = "http://api.map.baidu.com/telematics/v3/weather";
 
+    public static final String PIC_URL = "http://api.dujin.org/bing/1366.php";
+
     private static final String AK = "6tYzTvGZSOpYB5Oc2YGGOKt8";
 
     private static final String OUTPUT = "json";

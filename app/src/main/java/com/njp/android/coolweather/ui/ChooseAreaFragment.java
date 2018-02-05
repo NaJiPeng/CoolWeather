@@ -67,7 +67,8 @@ public class ChooseAreaFragment extends Fragment {
                         queryDistrict(dataList.get(position));
                         break;
                     case LEVEL_DISTRICT:
-                        //TODO
+                        WeatherActivity activity = (WeatherActivity) getActivity();
+                        activity.changeLocation(dataList.get(position));
                         break;
                     default:
                         break;
