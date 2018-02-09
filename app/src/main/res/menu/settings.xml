@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<menu xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <item android:id="@+id/item_location" android:title="自动定位" android:checkable="true"/>
+    <item android:id="@+id/item_update" android:title="自动更新" android:checkable="true"/>
+
+</menu>

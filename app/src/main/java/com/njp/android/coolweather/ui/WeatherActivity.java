@@ -2,6 +2,7 @@ package com.njp.android.coolweather.ui;
 
 import android.Manifest;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.support.annotation.NonNull;
 import android.support.v4.app.ActivityCompat;
@@ -14,6 +15,8 @@ import android.util.Log;
 import android.view.Gravity;
 import android.view.KeyEvent;
 import android.view.LayoutInflater;
+import android.view.Menu;
+import android.view.MenuInflater;
 import android.view.View;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
@@ -40,25 +43,29 @@ import org.w3c.dom.Text;
 import java.security.MessageDigest;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
 
 public class WeatherActivity extends AppCompatActivity {
-
+    private static final String TAG = "WeatherActivity";
 
     public static final int REQUEST_PERMISSION = 1001;
-    private OkHttpClient mClient = new OkHttpClient();
 
-    private LocationClient mLocationClient = new LocationClient(this);
+    private OkHttpClient mClient;
 
-    private String location;
+    private LocationClient mLocationClient;
+
+    private String mLocation;
 
     private DrawerLayout mDrawerLayout;
 
     private SwipeRefreshLayout mSwipeRefreshLayout;
 
     private ImageView menu;
+
+    private ImageView settings;
 
     private ImageView background;
 
@@ -80,21 +87,38 @@ public class WeatherActivity extends AppCompatActivity {
 
     private LinearLayout suggestLayout;
 
+    private SharedPreferences mPreferences;
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_weather);
 
         initView();
-        initEvent();
-        initPermission();
-        if (location != null) {
-            requestWeather(location);
-        }
 
+        initEvent();
     }
 
-    private void initPermission() {
+    @Override
+    protected void onStart() {
+        super.onStart();
+        initLocation();
+        requestWeather();
+    }
+
+    private void initLocation() {
+        mLocation = mPreferences.getString("location", null);
+        boolean isLocation = mPreferences.getBoolean("isLocation", true);
+        if (isLocation) {
+            requestLocation();
+        }
+        if (mLocation == null) {
+            mPreferences.edit().putString("location", "").apply();
+            mLocation = "";
+        }
+    }
+
+    private void requestLocation() {
         List<String> permissionList = new ArrayList<>();
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION)
                 != PackageManager.PERMISSION_GRANTED) {
@@ -113,18 +137,22 @@ public class WeatherActivity extends AppCompatActivity {
             String[] permissions = permissionList.toArray(new String[permissionList.size()]);
             ActivityCompat.requestPermissions(this, permissions, REQUEST_PERMISSION);
         } else {
-            requestLocation();
+            mLocationClient.start();
+        }
+    }
+
+    private void requestWeather() {
+
+        Log.i(TAG, "requestWeather: " + mLocation);
+        mSwipeRefreshLayout.setRefreshing(true);
+        if (mLocation.equals("")) {
+            ToastUtil.show("请选择城市");
+            mSwipeRefreshLayout.setRefreshing(false);
+            return;
         }
 
-    }
-
-    private void requestLocation() {
-        mLocationClient.start();
-    }
-
-    private void requestWeather(String location) {
         Request request = new Request.Builder()
-                .url(UrlConfig.getUrl(location))
+                .url(UrlConfig.getUrl(mLocation))
                 .get()
                 .build();
         mClient.newCall(request).enqueue(new WeatherCallback() {
@@ -186,7 +214,6 @@ public class WeatherActivity extends AppCompatActivity {
                     suggestLayout.addView(textView);
                 }
 
-                ToastUtil.show("天气获取成功");
                 mSwipeRefreshLayout.setRefreshing(false);
             }
         });
@@ -206,6 +233,7 @@ public class WeatherActivity extends AppCompatActivity {
         mSwipeRefreshLayout = findViewById(R.id.swipe_refresh_layout);
         menu = findViewById(R.id.menu);
         mDrawerLayout = findViewById(R.id.drawer_layout);
+        settings = findViewById(R.id.settings);
 
         Glide.with(background.getContext())
                 .setDefaultRequestOptions(new RequestOptions()
@@ -214,13 +242,29 @@ public class WeatherActivity extends AppCompatActivity {
                 .load(UrlConfig.PIC_URL)
                 .into(background);
 
+        mClient = new OkHttpClient.Builder()
+                .connectTimeout(5000, TimeUnit.MILLISECONDS)
+                .readTimeout(5000, TimeUnit.MILLISECONDS)
+                .writeTimeout(5000, TimeUnit.MILLISECONDS)
+                .build();
+
+        mLocationClient = new LocationClient(this);
+
+        mPreferences = getSharedPreferences("settings", MODE_PRIVATE);
+
+        LocationClientOption option = new LocationClientOption();
+        option.setIsNeedAddress(true);
+        mLocationClient.setLocOption(option);
+
     }
 
     public void changeLocation(String location) {
+
         mDrawerLayout.closeDrawers();
-        this.location = location;
+        mLocation = location;
+        mPreferences.edit().putString("location", mLocation).apply();
         mSwipeRefreshLayout.setRefreshing(true);
-        requestWeather(location);
+        requestWeather();
     }
 
     private void initEvent() {
@@ -228,9 +272,7 @@ public class WeatherActivity extends AppCompatActivity {
         mSwipeRefreshLayout.setOnRefreshListener(new SwipeRefreshLayout.OnRefreshListener() {
             @Override
             public void onRefresh() {
-                if (location != null) {
-                    requestWeather(location);
-                }
+                requestWeather();
             }
         });
 
@@ -241,14 +283,19 @@ public class WeatherActivity extends AppCompatActivity {
             }
         });
 
-        LocationClientOption option = new LocationClientOption();
-        option.setIsNeedAddress(true);
-        mLocationClient.setLocOption(option);
         mLocationClient.registerLocationListener(new BDAbstractLocationListener() {
             @Override
             public void onReceiveLocation(BDLocation bdLocation) {
                 String district = bdLocation.getDistrict();
                 changeLocation(district);
+            }
+        });
+
+        settings.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                Intent intent = new Intent(WeatherActivity.this, SettingActivity.class);
+                startActivity(intent);
             }
         });
 
@@ -265,7 +312,7 @@ public class WeatherActivity extends AppCompatActivity {
                             return;
                         }
                     }
-                    requestLocation();
+                    mLocationClient.start();
                 }
                 break;
         }
@@ -282,6 +329,12 @@ public class WeatherActivity extends AppCompatActivity {
             return true;
         }
         return super.onKeyDown(keyCode, event);
+    }
+
+    @Override
+    public boolean onCreateOptionsMenu(Menu menu) {
+        getMenuInflater().inflate(R.menu.settings, menu);
+        return true;
     }
 
     @Override
